@@ -1,16 +1,13 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
-
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('TkAgg')  # Use TkAgg backend
-
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from mpl_toolkits.mplot3d import Axes3D
 import time
-
 from matplotlib.figure import Figure
 
 np.random.seed(0)
@@ -84,66 +81,34 @@ def generate_and_plot_data(start_points, std_dev, num_points, plot_frame, num_in
     best_labels = None
     prev_test_error = float('inf')
     total_runtime = 0  # Variable to accumulate total runtime
-    # Ground truth labels for computing the error of the ground truth clusterings
-    ground_truth_labels = np.concatenate([np.full(num_points, i) for i in range(k)])
-    ground_truth_centroids = start_points
-    ground_truth_distances = np.linalg.norm(train_data[:, np.newaxis] - ground_truth_centroids, axis=2) ** 2
-    ground_truth_error = np.sum(np.min(ground_truth_distances, axis=1))
-    print(f"Ground truth error: {ground_truth_error:.4f}")
+    errors = []  # List to store errors for each initialization
+
     for i in range(num_initializations):
-        centroids, labels, train_error, runtime = k_means(train_data, k, max_iters)
-        total_runtime += runtime  # Accumulate runtime
+        centroids, labels, error, runtime = k_means(train_data, k, max_iters)
+        total_runtime += runtime
+
+        # Calculate error on test data
         test_distances = np.linalg.norm(test_data[:, np.newaxis] - centroids, axis=2) ** 2
         test_error = np.sum(np.min(test_distances, axis=1))
-        if test_error > prev_test_error:
-            pass
-            # print("Warning: Test error increased!")
-        prev_test_error = test_error
-        if train_error < best_error:
-            best_error = train_error
+        errors.append(test_error)
+
+        if test_error < best_error:
+            best_error = test_error
             best_centroids = centroids
             best_labels = labels
-        # print(f"Initialization {i + 1}, Train Error: {train_error:.4f}, Test Error: {test_error:.4f}, Runtime: {runtime:.4f} seconds")
-    # Compute friend matrices and similarity measure
-    FGT = compute_friend_matrix(ground_truth_labels)
-    Ftrain = compute_friend_matrix(best_labels)
-    Fintersect = FGT * Ftrain
-    S = (np.sum(Fintersect) / np.sum(FGT) + np.sum(Fintersect) / np.sum(Ftrain)) / 2
-    print(f"Cluster similarity measure S: {S:.4f}")
-    # Plot clustered training data for the best initialization (only if dimensions are 2 or 3)
-    if start_points.shape[1] == 2 or start_points.shape[1] == 3:
-        # Clear the plot_frame
-        for widget in plot_frame.winfo_children():
-            widget.destroy()
-        # Create a Figure
-        fig = Figure(figsize=(6, 4))
-        if start_points.shape[1] == 2:
-            ax = fig.add_subplot(111)
-            for i in range(k):
-                cluster_data = train_data[best_labels == i]
-                ax.scatter(cluster_data[:, 0], cluster_data[:, 1], alpha=0.5, label=f'Train Cluster {i + 1}')
-            ax.scatter(best_centroids[:, 0], best_centroids[:, 1], c='red', marker='x', label='Centroids')
-            ax.set_title(f'K-Means Clustering on Training Data\n(Best Initialization, std_dev={std_dev})')
-            ax.set_xlabel('X')
-            ax.set_ylabel('Y')
-            ax.legend()
-        elif start_points.shape[1] == 3:
-            ax = fig.add_subplot(111, projection='3d')
-            for i in range(k):
-                cluster_data = train_data[best_labels == i]
-                ax.scatter(cluster_data[:, 0], cluster_data[:, 1], cluster_data[:, 2], alpha=0.5, label=f'Train Cluster {i + 1}')
-            ax.scatter(best_centroids[:, 0], best_centroids[:, 1], best_centroids[:, 2], c='red', marker='x', label='Centroids')
-            ax.set_title(f'K-Means Clustering on Training Data\n(Best Initialization, std_dev={std_dev})')
-            ax.set_xlabel('X')
-            ax.set_ylabel('Y')
-            ax.set_zlabel('Z')
-            ax.legend()
-        # Create a FigureCanvasTkAgg object
-        canvas = FigureCanvasTkAgg(fig, master=plot_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+    # Plot the error versus the number of initializations
+    fig, ax = plt.subplots()
+    ax.plot(range(1, num_initializations + 1), errors, marker='o')
+    ax.set_title('Testing Error vs Number of Initializations')
+    ax.set_xlabel('Number of Initializations')
+    ax.set_ylabel('Testing Error')
+    canvas = FigureCanvasTkAgg(fig, master=plot_frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
     # Print the best error
-    print(f"Best training error at convergence: {best_error:.4f}")
+    print(f"Best testing error at convergence: {best_error:.4f}")
     # Calculate and print the ground truth error
     ground_truth_labels = np.concatenate([np.full(num_points, i) for i in range(k)])
     ground_truth_centroids = np.array([start_points[i].flatten() for i in range(k)])
